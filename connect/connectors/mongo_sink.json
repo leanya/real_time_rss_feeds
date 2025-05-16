@@ -1,0 +1,15 @@
+{
+    "name": "mongo-tutorial-sink",
+    "config": {
+      "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+      "topics": "world_nyt,biz_nyt",
+      "connection.uri": "mongodb://user:pass@mongodb:27017",
+      "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "key.converter.schemas.enable": false,
+      "value.converter.schemas.enable": false,
+      "database": "mongo",
+      "topic.override.world_nyt.collection": "nyc_world", 
+      "topic.override.biz_nyt.collection": "nyc_biz"
+    }
+  }

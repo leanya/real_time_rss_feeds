@@ -1,0 +1,122 @@
+services:
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_container
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: pass
+      MONGO_INITDB_DATABASE: mongo
+    ports:
+      - 27017:27017
+      # - 27018:27017 # When Flask is run on the host machine which has mongodb installed 
+    volumes:
+      - dbdata:/data/db
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - 2181:2181
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    ports:
+      - 19091:19091 # For internal Docker clients
+      - 9091:9091 # For host access
+    depends_on:
+      - zookeeper
+      - mongodb
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: LISTENER_DOCKER_INTERNAL://kafka:19091,LISTENER_DOCKER_EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9091
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_DOCKER_INTERNAL:PLAINTEXT,LISTENER_DOCKER_EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_DOCKER_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+  
+  kafka2:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka2
+    ports:
+      - 19092:19092 # For internal Docker clients
+      - 9092:9092 # For host access
+    depends_on:
+      - zookeeper
+      - mongodb
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: LISTENER_DOCKER_INTERNAL://kafka2:19092,LISTENER_DOCKER_EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_DOCKER_INTERNAL:PLAINTEXT,LISTENER_DOCKER_EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_DOCKER_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    restart: "no"
+    ports:
+      - 9000:9000
+    environment:
+      KAFKA_BROKERCONNECT: kafka:19091,kafka2:19092
+    depends_on:
+      - kafka
+      - kafka2
+
+  kafka-mongo-connector:
+    build: ./connect
+    depends_on: 
+      - zookeeper
+      - mongodb
+      - kafka
+      - kafka2
+    ports:
+      - 8083:8083
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:19091,kafka2:19092
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-mongo-connector
+      # CONNECT_REST_ADVERTISED_HOST_NAME: "localhost"
+  
+  producer_world:
+    build: ./producer
+    environment:
+      NEWS_TYPE: world_nyt
+    depends_on:
+      - kafka
+    volumes:
+      - ./global_publish_time_world.json:/app/global_publish_time.json
+
+  producer_business:
+    build: ./producer
+    environment:
+      NEWS_TYPE: biz_nyt
+    depends_on:
+      - kafka
+    volumes:
+      - ./global_publish_time_biz.json:/app/global_publish_time.json
+
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - 5000:5000
+    depends_on: 
+      - mongodb
+      - producer_world
+      - producer_business
+
+volumes:
+  dbdata:
